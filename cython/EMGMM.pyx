@@ -3,34 +3,83 @@
 from __future__ import division
 import numpy as np
 cimport numpy as np
-from libc.math cimport exp
-
-
 
 DTYPE = np.float64
 ctypedef np.float64_t DTYPE_t
 
 
 ##############################################################################
-#										E-Step																									 #
+# Calcula parâmetros das PDF #
 ##############################################################################
-cdef EStep(int n_mixture, np.ndarray[DTYPE_t, ndim=2] data, 
-	np.ndarray[DTYPE_t, ndim=2] means, np.ndarray[DTYPE_t, ndim=3] covars, 
-	np.ndarray[DTYPE_t, ndim=2] z):
+cdef pdf_params(np.ndarray[DTYPE_t, ndim=3] covars,
+		np.ndarray[DTYPE_t, ndim=1] coefs,
+		np.ndarray[DTYPE_t, ndim=3] inv_covars
+		):
+	cdef int dims = covars.shape[1]
+	for k in range(covars.shape[0]):
+		print k
+		coefs[k] = 1.0/sqrt( (2 * np.pi)**dims * np.linalg.det(covars[k]) )
+		inv_covars[k] = np.linalg.inv(covars[k])
+
+
+##############################################################################
+# Veross #
+##############################################################################
+cdef veross(unsigned int i,
+	    np.ndarray[DTYPE_t, ndim=1] x, 
+	    np.ndarray[DTYPE_t, ndim=2] means,
+	    np.ndarray[DTYPE_t, ndim=1] coefs,
+	    np.ndarray[DTYPE_t, ndim=3] inv_covars):
+
+	xm = x - means[i]
+	return coefs[i] * \
+	       exp(-.5 * np.dot(np.dot(xm, inv_covars[i]),xm))
+
+##############################################################################
+# E-Step #
+##############################################################################
+cdef EStep(int n_mixture,
+	   np.ndarray[DTYPE_t, ndim=2] data,
+	   np.ndarray[DTYPE_t, ndim=2] means,
+	   np.ndarray[DTYPE_t, ndim=3] covars,
+	   np.ndarray[DTYPE_t, ndim=2] z,
+	   np.ndarray[DTYPE_t, ndim=1] pk,
+	   np.ndarray[DTYPE_t, ndim=1] coefs,
+	   np.ndarray[DTYPE_t, ndim=3] inv_covars
+	   ):
 
 	cdef unsigned int i, j, datalen	
 	datalen = data.shape[0]
+	cdef double nf
+	for j in xrange(datalen):
+		nf = 0.0
+		for i in xrange(n_mixture):
+			z[j, i] = pk[i] * veross(i, data[j], means, coefs, inv_covars)
+			nf = nf + z[j, i]
+		for i in xrange(n_mixture):
+			z[j, i] = z[j, i] / nf
+
 	for i in xrange(n_mixture):
+		pk[i] = 0
 		for j in xrange(datalen):
-			z[j, i] = veross(i, j, data, means, covars)
-	z = z.T/z.sum(axis=1).T
+			pk[i] += z[j, i]
+	nf = 0.0
+	for i in xrange(n_mixture):
+		nf += pk[i]
+	for i in xrange(n_mixture):
+		pk[i] = pk[i] / nf
+
+
+
 
 ##############################################################################
-#										M-Step																									 #
+# M-Step #
 ##############################################################################
-cdef MStep(int n_mixture, np.ndarray[DTYPE_t, ndim=2] data, 
-	np.ndarray[DTYPE_t, ndim=2] means, np.ndarray[DTYPE_t, ndim=3] covars, 
-	np.ndarray[DTYPE_t, ndim=2] z):
+cdef MStep(int n_mixture, np.ndarray[DTYPE_t, ndim=2] data,
+	   np.ndarray[DTYPE_t, ndim=2] means,
+	   np.ndarray[DTYPE_t, ndim=3] covars,
+	   np.ndarray[DTYPE_t, ndim=2] z,
+	   np.ndarray[DTYPE_t, ndim=1] pk):
 
 	cdef np.ndarray[DTYPE_t, ndim=2] newmi = np.zeros_like(means)
 	cdef np.ndarray[DTYPE_t, ndim=3] newcov = np.zeros_like(covars)
@@ -38,39 +87,30 @@ cdef MStep(int n_mixture, np.ndarray[DTYPE_t, ndim=2] data,
 
 	for i in xrange(n_mixture):
 		for j in xrange(data.shape[0]):
-			newmi[i] += z[j, i] * data[j]			
-			newcov[i] += z[j, i] * np.outer(data[j] - means[i],data[j] - means[i])
+			newmi[i] += z[j, i] * data[j]
 		means[i] = newmi[i] / z[:, i].sum()
+
+	for i in xrange(n_mixture):
+		for j in xrange(data.shape[0]):
+			newcov[i] += z[j, i] * np.outer(data[j] - means[i],data[j] - means[i])
 		covars[i] = newcov[i] / z[:, i].sum()
 
-##############################################################################
-#										Veross  																								 #
-##############################################################################
-cdef veross(unsigned int i, unsigned int j, np.ndarray[DTYPE_t, ndim=2] data, 
-	np.ndarray[DTYPE_t, ndim=2] means, np.ndarray[DTYPE_t, ndim=3] covars):
-
-	cdef double x = data[j]
-	cdef np.ndarray[DTYPE_t, ndim=1] mean = means[i]
-	cdef np.ndarray[DTYPE_t, ndim=2] cov = covars[i]
-	cdef np.ndarray[DTYPE_t, ndim=1] xm = np.subtract(x,means[i])
-
-	print 'x', x
-	print 'mean', mean
-	print 'cov', cov
-	print 'xm', xm
-
-	return (1/(2 * np.pi * np.linalg.det(cov) ** 0.5)) * \
-				exp(-.5 * np.dot(np.dot(xm, np.linalg.inv(cov)),xm))
 
 ##############################################################################
-#										Fit   																									 #
+# Fit #
 ##############################################################################
-cdef fit(unsigned int iter, int n_mixture, np.ndarray[DTYPE_t, ndim=2] data, 
-	np.ndarray[DTYPE_t, ndim=2] means, np.ndarray[DTYPE_t, ndim=3] covars, 
-	np.ndarray[DTYPE_t, ndim=2] z):
+cdef fit(unsigned int iter, int n_mixture,
+	 np.ndarray[DTYPE_t, ndim=2] data, 
+	 np.ndarray[DTYPE_t, ndim=2] means,
+	 np.ndarray[DTYPE_t, ndim=3] covars, 
+	 np.ndarray[DTYPE_t, ndim=2] z,
+	 np.ndarray[DTYPE_t, ndim=1] pk,
+	 np.ndarray[DTYPE_t, ndim=1] coefs,
+	 np.ndarray[DTYPE_t, ndim=3] inv_covars):
 	for it in xrange(iter):
-		EStep(n_mixture, data, means, covars, z)
-		MStep(n_mixture, data, means, covars, z)
+		pdf_params(covars, coefs, inv_covars)
+		EStep(n_mixture, data, means, covars, z, pk, coefs, inv_covars)
+		MStep(n_mixture, data, means, covars, z, pk)
 
 cdef extern double atan2(double,double)
 cdef extern double floor(double)
@@ -83,7 +123,7 @@ cdef extern double fabs(double)
 
 
 ##############################################################################
-#										Python Object	:)																				 #
+# Python class #
 ##############################################################################
 class EMGMM:
 
@@ -94,12 +134,18 @@ class EMGMM:
 		self.dim = data.shape[1]
 		self.means = np.ones((n_mixture, self.dim))
 		self.covars = np.ones((n_mixture, self.dim, self.dim))
-		self.covars *= np.identity(self.dim)
+		self.covars *= 0.01 * np.identity(self.dim)
 		self.means = kmeans(n_mixture, data)[0]
 		self.z = np.zeros((len(data), self.n_mixture))
 
+		self.pk = np.ones((n_mixture,)) / n_mixture
+
+		self.coefs = np.zeros((n_mixture,))
+		self.inv_covars = np.zeros(self.covars.shape)
+
 	def iterate(self, iter):
-		fit(iter, self.n_mixture, self.data, self.means, self.covars, self.z)
+		fit(iter, self.n_mixture, self.data, self.means, self.covars, self.z, self.pk,
+		    self.coefs, self.inv_covars)
 		#except:
 			#print "Singular Covariance Matrix... Restarting..."
 			#self.__init__(self.n_mixture, self.data)
@@ -109,7 +155,7 @@ class EMGMM:
 
 
 ##############################################################################
-#										K means          																				 #
+# K means #
 ##############################################################################
 cdef kmeans(unsigned int n_clusters, np.ndarray[DTYPE_t, ndim=2] data):
 
@@ -139,7 +185,7 @@ cdef kmeans(unsigned int n_clusters, np.ndarray[DTYPE_t, ndim=2] data):
 
 
 ##############################################################################
-#										Distance        																				 #
+# Distance #
 ##############################################################################
 cdef distance(np.ndarray[DTYPE_t, ndim=2] clusters, 
 	np.ndarray[DTYPE_t, ndim=2] data):
@@ -152,3 +198,8 @@ cdef distance(np.ndarray[DTYPE_t, ndim=2] clusters,
 	for i in xrange(clusters.shape[0]):
 		c[i] = np.sqrt(((data-clusters[i])**2).sum(axis=1))
 	return c.T
+
+
+## Local Variables:
+## fill-column: 79
+## End:
