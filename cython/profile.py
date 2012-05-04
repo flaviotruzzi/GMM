@@ -13,6 +13,7 @@ import EMGMM
 im = array(Image.open("/home/nlw/ciencia/DADOS/abelhas/imagens/000.png")).reshape(-1,3)
 
 data = im[:,2:3]/256.0
+#data = im[:,0:3]/256.0
 a =  EMGMM.EMGMM(3, data)
 aini = copy(a.means)
 
@@ -20,7 +21,13 @@ a.iterate(1)
 
 ast1 = copy(a.means)
 
-a.iterate(3)
+# cProfile.runctx("a.iterate(10)", globals(), locals(), "Profile.prof")
+# s = pstats.Stats("Profile.prof")
+# s.strip_dirs().sort_stats("cum").print_stats()
+# raise Exception
+
+
+a.iterate(10)
 
 
 ion()
@@ -46,10 +53,3 @@ title('Histograma do canal azul + GMM ajustado')
 # for m in a.means:
 #     plot([m,m], [0,hh.max()], 'r-')
 
-
-
-
-# cProfile.runctx("a.iterate(1)", globals(), locals(), "Profile.prof")
-
-# s = pstats.Stats("Profile.prof")
-# s.strip_dirs().sort_stats("time").print_stats()

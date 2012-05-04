@@ -1,4 +1,8 @@
 #!/usr/bin/env 
+# cython: boundscheck=False
+# cython. wraparound=False
+# cython: cdivision=True
+# cython: profile=True
 
 from __future__ import division
 import numpy as np
@@ -25,15 +29,23 @@ cdef pdf_params(np.ndarray[DTYPE_t, ndim=3] covars,
 ##############################################################################
 # Veross #
 ##############################################################################
-cdef veross(unsigned int i,
-	    np.ndarray[DTYPE_t, ndim=1] x, 
-	    np.ndarray[DTYPE_t, ndim=2] means,
-	    np.ndarray[DTYPE_t, ndim=1] coefs,
-	    np.ndarray[DTYPE_t, ndim=3] inv_covars):
+cdef inline double veross(unsigned int i,unsigned int j,unsigned int dims,
+			  double* x, double* means,
+			  double* coefs, double* M):
+	cdef double xm[5]
+	x += j*dims
+	M += i*dims*dims
 
-	xm = x - means[i]
-	return coefs[i] * \
-	       exp(-.5 * np.dot(np.dot(xm, inv_covars[i]),xm))
+	cdef int aj,ak 
+	for ak in range(dims):
+		xm[ak] = x[ak] - means[i*dims+ak]
+
+	cdef double dotdot = 0.0
+	for aj in range(dims):
+		for ak in range(dims):
+			dotdot += xm[aj] * xm[ak] * M[aj*dims+ak]
+
+	return coefs[i] * exp(-.5 * dotdot)
 
 ##############################################################################
 # E-Step #
@@ -50,15 +62,23 @@ cdef EStep(int n_mixture,
 
 	cdef unsigned int i, j, datalen	
 	datalen = data.shape[0]
+
+	cdef int dims = data.shape[1]
 	cdef double nf
 	for j in xrange(datalen):
 		nf = 0.0
 		for i in xrange(n_mixture):
-			z[j, i] = pk[i] * veross(i, data[j], means, coefs, inv_covars)
+			z[j, i] = pk[i] * veross(i, j, dims,
+						 <double*>data.data,
+						 <double*>means.data,
+						 <double*>coefs.data,
+						 <double*>inv_covars.data)
 			nf = nf + z[j, i]
+		## Normalize this line
 		for i in xrange(n_mixture):
 			z[j, i] = z[j, i] / nf
 
+	## Calculate new pk values
 	for i in xrange(n_mixture):
 		pk[i] = 0
 		for j in xrange(datalen):
@@ -81,19 +101,72 @@ cdef MStep(int n_mixture, np.ndarray[DTYPE_t, ndim=2] data,
 	   np.ndarray[DTYPE_t, ndim=2] z,
 	   np.ndarray[DTYPE_t, ndim=1] pk):
 
-	cdef np.ndarray[DTYPE_t, ndim=2] newmi = np.zeros_like(means)
-	cdef np.ndarray[DTYPE_t, ndim=3] newcov = np.zeros_like(covars)
-	cdef unsigned int i, j
+	cdef unsigned int i, j,aj,ak,dd
 
-	for i in xrange(n_mixture):
-		for j in xrange(data.shape[0]):
-			newmi[i] += z[j, i] * data[j]
-		means[i] = newmi[i] / z[:, i].sum()
+	cdef unsigned int dims = data.shape[1]
 
+        ## WATCH OUT assuming a maximum of 5 classes in problem
+	cdef double class_sum[5]
+        ## WATCH OUT assuming a maximum of 5 dimensions in problem
+	cdef double xx[5]
+
+	cdef double* d_data = <double*>data.data
+	cdef double* m_data = <double*>means.data
+	cdef double* z_data = <double*>z.data
+
+	cdef double acc[25], zz
+
+
+	## Calculate the sum of each column of z
 	for i in xrange(n_mixture):
+		class_sum[i] = 0.0
 		for j in xrange(data.shape[0]):
-			newcov[i] += z[j, i] * np.outer(data[j] - means[i],data[j] - means[i])
-		covars[i] = newcov[i] / z[:, i].sum()
+			class_sum[i] += z_data[j*n_mixture+i]
+
+
+	## Calculate new mean estimates using weighted means
+	for i in xrange(n_mixture):
+		## Clear means
+		for dd in xrange(dims):
+			m_data[i*dims+dd] = 0.0
+		## Accumulate weighted coordinates
+		for j in xrange(data.shape[0]):
+			zz = z_data[j*n_mixture+i] ## Weight from this point
+			for dd in xrange(dims):
+				m_data[i*dims+dd] += zz * d_data[j*dims+dd]
+		for dd in xrange(dims):
+			m_data[i*dims+dd] = m_data[i*dims+dd] / class_sum[i]
+
+
+
+	## Calculate new covariance matrices using weighted means, and new mean
+	## estimates
+	for i in xrange(n_mixture):
+		# Clean accumulator
+		for aj in xrange(5):
+			for ak in xrange(5):
+				acc[aj*5+ak] = 0.0
+
+		## Iterate over the points and accumulate weighted outer
+		## products
+		for j in xrange(data.shape[0]):
+			zz = z_data[j*n_mixture+i] ## Weight from this point
+			## Calculate new vector-minus-mean
+			for dd in xrange(dims):
+				xx[dd] = d_data[j*dims+dd] - m_data[i*dims+dd]
+			for aj in xrange(dims):
+				for ak in xrange(aj,dims):					
+					acc[aj*dims+ak] += zz * xx[aj] * xx[ak]
+		## Divide by sum of weights from this class, and assign to
+		## output array
+		for aj in xrange(dims):
+			for ak in xrange(aj,dims):
+				zz = acc[aj*dims+ak] / class_sum[i]
+				covars[i,aj,ak] = zz
+				if ak > aj:
+					covars[i,ak,aj] = zz
+					
+
 
 
 ##############################################################################
