@@ -1,0 +1,6 @@
+EMGMM.c
+*.so
+*o
+*~
+build
+*.png

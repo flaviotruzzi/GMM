@@ -21,13 +21,12 @@ a.iterate(1)
 
 ast1 = copy(a.means)
 
-# cProfile.runctx("a.iterate(10)", globals(), locals(), "Profile.prof")
-# s = pstats.Stats("Profile.prof")
-# s.strip_dirs().sort_stats("cum").print_stats()
+cProfile.runctx("a.iterate(10)", globals(), locals(), "Profile.prof")
+s = pstats.Stats("Profile.prof")
+s.strip_dirs().sort_stats("time").print_stats()
+
 # raise Exception
-
-
-a.iterate(10)
+# a.iterate(10)
 
 
 ion()

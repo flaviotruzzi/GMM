@@ -2,7 +2,7 @@
 # cython: boundscheck=False
 # cython. wraparound=False
 # cython: cdivision=True
-# cython: profile=True
+# cython: profile=False
 
 from __future__ import division
 import numpy as np
@@ -11,7 +11,7 @@ cimport numpy as np
 DTYPE = np.float64
 ctypedef np.float64_t DTYPE_t
 
-
+	
 ##############################################################################
 # Calcula parâmetros das PDF #
 ##############################################################################
@@ -24,28 +24,6 @@ cdef pdf_params(np.ndarray[DTYPE_t, ndim=3] covars,
 		print k
 		coefs[k] = 1.0/sqrt( (2 * np.pi)**dims * np.linalg.det(covars[k]) )
 		inv_covars[k] = np.linalg.inv(covars[k])
-
-
-##############################################################################
-# Veross #
-##############################################################################
-cdef inline double veross(unsigned int i,unsigned int j,unsigned int dims,
-			  double* x, double* means,
-			  double* coefs, double* M):
-	cdef double xm[5]
-	x += j*dims
-	M += i*dims*dims
-
-	cdef int aj,ak 
-	for ak in range(dims):
-		xm[ak] = x[ak] - means[i*dims+ak]
-
-	cdef double dotdot = 0.0
-	for aj in range(dims):
-		for ak in range(dims):
-			dotdot += xm[aj] * xm[ak] * M[aj*dims+ak]
-
-	return coefs[i] * exp(-.5 * dotdot)
 
 ##############################################################################
 # E-Step #
@@ -63,31 +41,65 @@ cdef EStep(int n_mixture,
 	cdef unsigned int i, j, datalen	
 	datalen = data.shape[0]
 
+
+	cdef double* data_d = <double*>data.data
+	cdef double* means_d = <double*>means.data
+	cdef double* coefs_d = <double*>coefs.data
+	cdef double* inv_covars_d = <double*>inv_covars.data
+	cdef double* pk_d = <double*>pk.data
+
+	cdef double* z_d = <double *> z.data
+
 	cdef int dims = data.shape[1]
+
+
 	cdef double nf
+
+
+	cdef double* x = <double*>data.data
+	cdef double* M
+	cdef double* mu
+
+	cdef double xm[5]
+	cdef double dotdot
+	cdef double wrk
+	cdef int aj,ak 
+
+
 	for j in xrange(datalen):
 		nf = 0.0
+		M = inv_covars_d
+		mu = means_d
 		for i in xrange(n_mixture):
-			z[j, i] = pk[i] * veross(i, j, dims,
-						 <double*>data.data,
-						 <double*>means.data,
-						 <double*>coefs.data,
-						 <double*>inv_covars.data)
-			nf = nf + z[j, i]
+			dotdot = 0.0
+			for ak in range(dims):
+				xm[ak] = x[ak] - mu[ak]
+			for aj in range(dims):
+				for ak in range(dims):
+					dotdot += xm[aj] * xm[ak] * M[aj*dims+ak]
+			wrk = pk_d[i] * coefs_d[i] * exp(-.5 * dotdot)
+
+			mu += dims
+			M += dims*dims
+
+			z_d[j*n_mixture+i] = wrk
+			nf += wrk
+
 		## Normalize this line
 		for i in xrange(n_mixture):
-			z[j, i] = z[j, i] / nf
+			z_d[j*n_mixture+i] /= nf
+		x += dims
 
 	## Calculate new pk values
 	for i in xrange(n_mixture):
-		pk[i] = 0
+		pk_d[i] = 0
 		for j in xrange(datalen):
-			pk[i] += z[j, i]
+			pk_d[i] += z_d[j*n_mixture+i]
 	nf = 0.0
 	for i in xrange(n_mixture):
-		nf += pk[i]
+		nf += pk_d[i]
 	for i in xrange(n_mixture):
-		pk[i] = pk[i] / nf
+		pk_d[i] /= nf
 
 
 
@@ -180,10 +192,11 @@ cdef fit(unsigned int iter, int n_mixture,
 	 np.ndarray[DTYPE_t, ndim=1] pk,
 	 np.ndarray[DTYPE_t, ndim=1] coefs,
 	 np.ndarray[DTYPE_t, ndim=3] inv_covars):
+	pdf_params(covars, coefs, inv_covars)
 	for it in xrange(iter):
-		pdf_params(covars, coefs, inv_covars)
 		EStep(n_mixture, data, means, covars, z, pk, coefs, inv_covars)
 		MStep(n_mixture, data, means, covars, z, pk)
+		pdf_params(covars, coefs, inv_covars)
 
 cdef extern double atan2(double,double)
 cdef extern double floor(double)
@@ -194,6 +207,9 @@ cdef extern double log10(double)
 cdef extern double exp(double)
 cdef extern double fabs(double)
 
+cdef extern double fast_exp(double) ## Doesn't work well
+def py_fast_exp(x):
+	return fast_exp(x)
 
 ##############################################################################
 # Python class #
