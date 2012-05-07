@@ -10,7 +10,7 @@ from pylab import *
 
 import EMGMM
 
-im = array(Image.open("/home/nlw/ciencia/DADOS/abelhas/imagens/000.png")).reshape(-1,3)
+im = array(Image.open("imagens/chaly/1_Euglossa_chaly_m.jpg")).reshape(-1,3)
 
 data = im[:,2:3]/256.0
 #data = im[:,0:3]/256.0

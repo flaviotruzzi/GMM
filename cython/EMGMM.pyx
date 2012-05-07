@@ -21,7 +21,7 @@ cdef pdf_params(np.ndarray[DTYPE_t, ndim=3] covars,
 		):
 	cdef int dims = covars.shape[1]
 	for k in range(covars.shape[0]):
-		print k
+		#print k
 		coefs[k] = 1.0/sqrt( (2 * np.pi)**dims * np.linalg.det(covars[k]) )
 		inv_covars[k] = np.linalg.inv(covars[k])
 
@@ -118,15 +118,15 @@ cdef MStep(int n_mixture, np.ndarray[DTYPE_t, ndim=2] data,
 	cdef unsigned int dims = data.shape[1]
 
         ## WATCH OUT assuming a maximum of 5 classes in problem
-	cdef double class_sum[5]
+	cdef double class_sum[10]
         ## WATCH OUT assuming a maximum of 5 dimensions in problem
-	cdef double xx[5]
+	cdef double xx[10]
 
 	cdef double* d_data = <double*>data.data
 	cdef double* m_data = <double*>means.data
 	cdef double* z_data = <double*>z.data
 
-	cdef double acc[25], zz
+	cdef double acc[100], zz
 
 
 	## Calculate the sum of each column of z
@@ -155,8 +155,8 @@ cdef MStep(int n_mixture, np.ndarray[DTYPE_t, ndim=2] data,
 	## estimates
 	for i in xrange(n_mixture):
 		# Clean accumulator
-		for aj in xrange(5):
-			for ak in xrange(5):
+		for aj in xrange(10):
+			for ak in xrange(10):
 				acc[aj*5+ak] = 0.0
 
 		## Iterate over the points and accumulate weighted outer
@@ -207,9 +207,9 @@ cdef extern double log10(double)
 cdef extern double exp(double)
 cdef extern double fabs(double)
 
-cdef extern double fast_exp(double) ## Doesn't work well
-def py_fast_exp(x):
-	return fast_exp(x)
+#cdef extern double fast_exp(double) ## Doesn't work well
+#def py_fast_exp(x):
+#	return fast_exp(x)
 
 ##############################################################################
 # Python class #
@@ -233,12 +233,13 @@ class EMGMM:
 		self.inv_covars = np.zeros(self.covars.shape)
 
 	def iterate(self, iter):
+#		try:
 		fit(iter, self.n_mixture, self.data, self.means, self.covars, self.z, self.pk,
 		    self.coefs, self.inv_covars)
-		#except:
-			#print "Singular Covariance Matrix... Restarting..."
-			#self.__init__(self.n_mixture, self.data)
-			#self.iterate(iter)
+	#	except:
+	#		print "Singular Covariance Matrix... Restarting..."
+	#		self.__init__(self.n_mixture, self.data)
+	#		self.iterate(iter)
 
 ##############################################################################
 
