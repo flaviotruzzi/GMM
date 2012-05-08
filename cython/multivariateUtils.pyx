@@ -15,13 +15,26 @@ DTYPE = np.float64
 ctypedef np.float64_t DTYPE_t
 
 
-cdef KullbackLeiberDivergence(
+cpdef KullbackLeiberDivergence(
     np.ndarray[DTYPE_t, ndim=1] u0, 
     np.ndarray[DTYPE_t, ndim=1] u1,
     np.ndarray[DTYPE_t, ndim=2] cov0,
     np.ndarray[DTYPE_t, ndim=2] cov1,    
     ):
   return .5 *( np.trace(np.dot(np.linalg.inv(cov1), cov0)) + np.dot(np.dot((u1-u0).T, np.linalg.inv(cov1)), (u1-u0)) - np.log(np.linalg.det(cov0)/np.linalg.det(cov1)))
+
+cpdef mahalanobisDistance(
+    np.ndarray[DTYPE_t, ndim=1] u0,
+    np.ndarray[DTYPE_t, ndim=1] u1,
+    np.ndarray[DTYPE_t, ndim=2] pooledCov
+    ):
+    return np.dot(np.dot(u0-u1, np.linalg.inv(pooledCov)), (u0-u1).T)
+
+cpdef pooledCov(
+    np.ndarray[DTYPE_t, ndim=2] cov1,
+    np.ndarray[DTYPE_t, ndim=2] cov2
+    ):
+    return (cov1+cov2)/2
 
 def correspondence(
     np.ndarray[DTYPE_t, ndim=2] means1,
@@ -35,6 +48,6 @@ def correspondence(
 
   for i in xrange(n_mixture):
     for j in xrange(n_mixture):
-      presult[i,j] = KullbackLeiberDivergence(means1[i],means2[j],covars1[i],covars2[j])
+      presult[i,j] = mahalanobisDistance(means1[i],means2[j],pooledCov(covars1[i],covars2[j]))
 
   return presult.argmin(axis=1)
