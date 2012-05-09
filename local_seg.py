@@ -37,12 +37,19 @@ for cl in range(3):
     icovs[cl] = inv(covs[cl])
     pcoef[cl] = 1.0/ sqrt( (2*pi) ** 3 * det(covs[cl]) )
 
-zz = zeros((frame.shape[0],frame.shape[1],3))
+
+immu = zeros((frame.shape[0],frame.shape[1],3,3))/3.0
+for cl in range(3):
+    immu[:,:,cl,:] = mu[cl]
+
+zz = ones((frame.shape[0],frame.shape[1],3))/3.0
+newzz = zeros((frame.shape[0],frame.shape[1],3))
 err = zeros((3,frame.shape[0],frame.shape[1],3))
 
 ## Calcualte residues fmo each class
 for cl in range(3):
-    err[cl,:,:,:] = frame-mu[cl]
+#    err[cl,:,:,:] = frame-mu[cl]
+    err[cl,:,:,:] = frame-immu[:,:,cl]
 
 print 70*'='
 print pc
@@ -50,13 +57,34 @@ print mu
 print covs
 
 for ii in range(3):
+    newzz[:] = 0
     ######################
     # E Step
     for j in xrange(frame.shape[0]):
         for k in xrange(frame.shape[1]):
             for cl in range(3):
-                zz[j,k,cl] = pc[cl] * pcoef[cl] * exp( -0.5 * dot(err[cl,j,k],dot(icovs[cl], err[cl,j,k])))
-            ## Nomralize class probabilities for each point
+                zz[j,k,cl] *= pcoef[cl] * exp( -0.5 * dot(err[cl,j,k],dot(icovs[cl], err[cl,j,k])))
+                #zz[j,k,cl] = pc[cl] * pcoef[cl] * exp( -0.5 * dot(err[cl,j,k],dot(icovs[cl], err[cl,j,k])))
+    # Smooth out
+    # newzz[0,:] = zz[0,:]
+    # newzz[:,0] = zz[:,0]
+    # newzz[-1,:] = zz[-1,:]
+    # newzz[:,-1] = zz[:,-1]
+    # for j in xrange(frame.shape[0]-2):
+    #     for k in xrange(frame.shape[1]-2):
+    #         fil = 0.0
+    #         for jj in xrange(3):
+    #             for kk in xrange(3):
+    #                 fil += zz[j+jj,k+kk]
+    #         newzz[j+1,k+1] = zz[j+1,k+1] *0.5 + 0.5 * (fil/9)
+    # zz[:] = newzz
+
+    zz+=1e-10
+
+
+    ## Nomralize class probabilities for each point
+    for j in xrange(frame.shape[0]):
+        for k in xrange(frame.shape[1]):
             zz[j,k,:] /= zz[j,k,:].sum()
 
     if ii == 0:
@@ -73,25 +101,48 @@ for ii in range(3):
         break
     
     ## The means
-    mu[:] = 0
+    immu[:] = 0
     for j in xrange(frame.shape[0]):
         for k in xrange(frame.shape[1]):
             for cl in range(3):
-                mu[cl] += zz[j,k,cl] * frame[j,k]
-    for cl in range(3):
-        mu[cl] /= pc[cl]
+                immu[j,k,cl] = zz[j,k,cl] * frame[j,k]
+
+    for j in xrange(frame.shape[0]-2):
+        for k in xrange(frame.shape[1]-2):            
+            for jj in xrange(3):
+                for kk in xrange(3):
+                    for cl in range(3):
+                        immu[j+1,k+1,cl] += zz[j+jj,k+kk,cl] * frame[j+jj,k+jj]
+
+    for j in xrange(frame.shape[0]-2):
+        for k in xrange(frame.shape[1]-2):            
+            for cl in range(3):
+                soma = zz[j+1,k+1,cl]
+                for jj in xrange(3):
+                    for kk in xrange(3):
+                        soma += zz[j+jj,k+kk,cl]
+                immu[j+1,k+1,cl] /= soma
+
+
+    # mu[:] = 0
+    # for j in xrange(frame.shape[0]):
+    #     for k in xrange(frame.shape[1]):
+    #         for cl in range(3):
+    #             mu[cl] += zz[j,k,cl] * frame[j,k]
+    # for cl in range(3):
+    #     mu[cl] /= pc[cl]
 
     ## Calculate the residues from each class
     for cl in range(3):
-        err[cl,:,:,:] = frame-mu[cl]
+        err[cl,:,:,:] = frame-immu[:,:,cl]
+        # err[cl,:,:,:] = frame-mu[cl]
 
     ## The covariances
     covs[:] = 0
     for j in xrange(frame.shape[0]):
         for k in xrange(frame.shape[1]):
-            xx = outer(err[cl,j,k],err[cl,j,k])
             for cl in range(3):
-                covs[cl] += zz[j,k,cl] * xx
+                covs[cl] += zz[j,k,cl] * outer(err[cl,j,k],err[cl,j,k])
     for cl in range(3):
         covs[cl] /= pc[cl]
         icovs[cl] = inv(covs[cl])
