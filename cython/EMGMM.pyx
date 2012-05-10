@@ -207,9 +207,9 @@ cdef extern double log10(double)
 cdef extern double exp(double)
 cdef extern double fabs(double)
 
-#cdef extern double fast_exp(double) ## Doesn't work well
-#def py_fast_exp(x):
-#	return fast_exp(x)
+cdef extern float fast_exp_mineiro(float) ## Doesn't work well
+def py_fast_exp(x):
+	return fast_exp_mineiro(x)
 
 ##############################################################################
 # Python class #

@@ -38,18 +38,19 @@ for cl in range(3):
     pcoef[cl] = 1.0/ sqrt( (2*pi) ** 3 * det(covs[cl]) )
 
 
-immu = zeros((frame.shape[0],frame.shape[1],3,3))/3.0
+immu = zeros((3,frame.shape[0],frame.shape[1],3))/3.0
 for cl in range(3):
-    immu[:,:,cl,:] = mu[cl]
+    immu[cl,:,:,:] = mu[cl]
 
 zz = ones((frame.shape[0],frame.shape[1],3))/3.0
 newzz = zeros((frame.shape[0],frame.shape[1],3))
 err = zeros((3,frame.shape[0],frame.shape[1],3))
+masked_frame = zeros((3,frame.shape[0],frame.shape[1],3))
 
 ## Calcualte residues fmo each class
 for cl in range(3):
 #    err[cl,:,:,:] = frame-mu[cl]
-    err[cl,:,:,:] = frame-immu[:,:,cl]
+    err[cl] = frame-immu[cl]
 
 print 70*'='
 print pc
@@ -65,19 +66,26 @@ for ii in range(3):
             for cl in range(3):
                 zz[j,k,cl] *= pcoef[cl] * exp( -0.5 * dot(err[cl,j,k],dot(icovs[cl], err[cl,j,k])))
                 #zz[j,k,cl] = pc[cl] * pcoef[cl] * exp( -0.5 * dot(err[cl,j,k],dot(icovs[cl], err[cl,j,k])))
-    # Smooth out
-    # newzz[0,:] = zz[0,:]
-    # newzz[:,0] = zz[:,0]
-    # newzz[-1,:] = zz[-1,:]
-    # newzz[:,-1] = zz[:,-1]
-    # for j in xrange(frame.shape[0]-2):
-    #     for k in xrange(frame.shape[1]-2):
-    #         fil = 0.0
-    #         for jj in xrange(3):
-    #             for kk in xrange(3):
-    #                 fil += zz[j+jj,k+kk]
-    #         newzz[j+1,k+1] = zz[j+1,k+1] *0.5 + 0.5 * (fil/9)
-    # zz[:] = newzz
+
+    for j in xrange(frame.shape[0]):
+        for k in xrange(frame.shape[1]):
+            ## Perform smoothing
+            # for cl in range(2):
+            #     for jj in range(-1,2):
+            #         for kk in range(-1,2):
+            #             newzz[j,k,cl] += zz[clip(j-jj,0,frame.shape[0]-1),
+            #                                 clip(k-kk,0,frame.shape[1]-1),cl]
+            #     newzz[j,k,cl] /= 9
+            for cl in range(2):
+                newzz[:,:,cl] = zz[:,:,cl]
+                
+            ## Perform grayscale dilation
+            for cl in range(2,3):
+                newzz[j,k,cl] = zz[clip(j-1,0,frame.shape[0]-1):clip(j+2,0,frame.shape[0]-1),
+                                   clip(k-1,0,frame.shape[1]-1):clip(k+2,0,frame.shape[1]-1),cl].max()
+
+
+    zz[:] = newzz
 
     zz+=1e-10
 
@@ -99,29 +107,30 @@ for ii in range(3):
     #pc /= pc.sum()
     if pc.min() == 0:
         break
-    
+
+    for cl in range(3):
+        masked_frame[cl] = (zz[:,:,cl].reshape(-1,1) * frame.reshape(-1,3)).reshape(frame.shape)
     ## The means
     immu[:] = 0
-    for j in xrange(frame.shape[0]):
-        for k in xrange(frame.shape[1]):
-            for cl in range(3):
-                immu[j,k,cl] = zz[j,k,cl] * frame[j,k]
+    immu[:] = masked_frame
 
-    for j in xrange(frame.shape[0]-2):
-        for k in xrange(frame.shape[1]-2):            
-            for jj in xrange(3):
-                for kk in xrange(3):
+
+    nn = 3
+    for j in xrange(frame.shape[0]-nn+1):
+        for k in xrange(frame.shape[1]-nn+1):            
+            for jj in xrange(nn):
+                for kk in xrange(nn):
                     for cl in range(3):
-                        immu[j+1,k+1,cl] += zz[j+jj,k+kk,cl] * frame[j+jj,k+jj]
+                        immu[cl,j+nn/2,k+nn/2] += masked_frame[cl,j+jj,k+kk]
 
-    for j in xrange(frame.shape[0]-2):
-        for k in xrange(frame.shape[1]-2):            
+    for j in xrange(frame.shape[0]-nn+1):
+        for k in xrange(frame.shape[1]-nn+1):            
             for cl in range(3):
-                soma = zz[j+1,k+1,cl]
-                for jj in xrange(3):
-                    for kk in xrange(3):
+                soma = zz[j+nn/2,k+nn/2,cl]
+                for jj in xrange(nn):
+                    for kk in xrange(nn):
                         soma += zz[j+jj,k+kk,cl]
-                immu[j+1,k+1,cl] /= soma
+                immu[cl,j+nn/2,k+nn/2] /= soma
 
 
     # mu[:] = 0
@@ -134,7 +143,7 @@ for ii in range(3):
 
     ## Calculate the residues from each class
     for cl in range(3):
-        err[cl,:,:,:] = frame-immu[:,:,cl]
+        err[cl,:,:,:] = frame-immu[cl,:,:]
         # err[cl,:,:,:] = frame-mu[cl]
 
     ## The covariances

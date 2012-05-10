@@ -4,7 +4,10 @@ from Cython.Distutils import build_ext
  
 setup(
     cmdclass = {'build_ext': build_ext},
-    ext_modules = [Extension("EMGMM", ["EMGMM.pyx"]),
-		 Extension("multivariateUtils", ["multivariateUtils.pyx"]
+    ext_modules = [Extension("EMGMM", ["EMGMM.pyx"],
+                             extra_objects=['schraudolph.o']
+                             ),
+                   Extension("multivariateUtils", ["multivariateUtils.pyx"]
                              )]
-)
+    
+    )
