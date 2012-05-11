@@ -2,7 +2,7 @@
 # cython: boundscheck=False
 # cython. wraparound=False
 # cython: cdivision=True
-# cython: profile=False
+# cython: profile=True
 
 from __future__ import division
 import numpy as np
@@ -77,7 +77,8 @@ cdef EStep(int n_mixture,
 			for aj in range(dims):
 				for ak in range(dims):
 					dotdot += xm[aj] * xm[ak] * M[aj*dims+ak]
-			wrk = pk_d[i] * coefs_d[i] * exp(-.5 * dotdot)
+			# wrk = pk_d[i] * coefs_d[i] * exp(-.5 * dotdot)
+			wrk = pk_d[i] * coefs_d[i] * fast_exp_mineiro(-.5 * dotdot)
 
 			mu += dims
 			M += dims*dims
@@ -192,13 +193,13 @@ cdef fit(unsigned int iter, int n_mixture,
 	 np.ndarray[DTYPE_t, ndim=1] pk,
 	 np.ndarray[DTYPE_t, ndim=1] coefs,
 	 np.ndarray[DTYPE_t, ndim=3] inv_covars,
-	 int Ncol, int Nlin):
+	 int Nlin, int Ncol):
 	pdf_params(covars, coefs, inv_covars)
 	cdef int cl = np.argmin(means[:,2])
 	print cl
 	for it in xrange(iter):
 		EStep(n_mixture, data, means, covars, z, pk, coefs, inv_covars)		
-		z_morph(z, cl, Ncol, Nlin)
+		z_morph(z, cl, Nlin, Ncol)
 		MStep(n_mixture, data, means, covars, z, pk)
 		pdf_params(covars, coefs, inv_covars)
 
@@ -211,7 +212,7 @@ cdef extern double log10(double)
 cdef extern double exp(double)
 cdef extern double fabs(double)
 
-cdef extern float fast_exp_mineiro(float) ## Doesn't work well
+cdef extern float fast_exp_mineiro(float)
 def py_fast_exp(x):
 	return fast_exp_mineiro(x)
 
@@ -224,9 +225,9 @@ def py_fast_exp(x):
 ##############################################################################
 # Morphological madness #
 ##############################################################################
-cdef z_morph(np.ndarray[DTYPE_t, ndim=2] z, int cl, int Ncol, int Nlin):
+cdef z_morph(np.ndarray[DTYPE_t, ndim=2] z, int cl, int Nlin, int Ncol):
 
-	cdef unsigned int j, k
+	cdef int j, k, jj, kk
 
 	cdef double* z_d = <double *> z.data
 	cdef double mmin,mmax,v
@@ -237,23 +238,23 @@ cdef z_morph(np.ndarray[DTYPE_t, ndim=2] z, int cl, int Ncol, int Nlin):
 	z_out[:] = z
 	
 	for j in xrange(5,Nlin-5):
-		for k in xrange(5,Nlin-5):
+		for k in xrange(5,Ncol-5):
 			mmax = 0
 			mmin=z_d[3*Ncol*(j)+3*(k)+cl]
-			v = z_d[3*Ncol*(j+3)+3*(k)+cl]
+			v = z_d[3*Ncol*(j+2)+3*(k)+cl]
 			if v < mmin:
 				mmin = v
-			v = z_d[3*Ncol*(j-3)+3*(k)+cl]
+			v = z_d[3*Ncol*(j-2)+3*(k)+cl]
 			if v < mmin:
 				mmin = v
 			if mmin > mmax:
 				mmax = mmin
 
 			mmin=z_d[3*Ncol*(j)+3*(k)+cl]
-			v = z_d[3*Ncol*(j)+3*(k+3)+cl]
+			v = z_d[3*Ncol*(j)+3*(k+2)+cl]
 			if v < mmin:
 				mmin = v
-			v = z_d[3*Ncol*(j)+3*(k-3)+cl]
+			v = z_d[3*Ncol*(j)+3*(k-2)+cl]
 			if v < mmin:
 				mmin = v
 			if mmin > mmax:
@@ -281,20 +282,41 @@ cdef z_morph(np.ndarray[DTYPE_t, ndim=2] z, int cl, int Ncol, int Nlin):
 
 			zo_d[3*Ncol*(j)+3*(k)+cl] = mmax
 
-			if cl != 0:
-				zo_d[3*Ncol*(j)+3*(k)] = z_d[3*Ncol*(j)+3*(k)]
-			if cl != 1:
-				zo_d[3*Ncol*(j)+3*(k)+1] = z_d[3*Ncol*(j)+3*(k)+1]
-			if cl != 2:
-				zo_d[3*Ncol*(j)+3*(k)+2] = z_d[3*Ncol*(j)+3*(k)+2]
+	## Now go back to the first array, making a dilation
+	for j in xrange(5,Nlin-5):
+		for k in xrange(5,Ncol-5):
+			mmax = 0
+			for jj in xrange(0,5):
+				for kk in xrange(0,5):
+					v = zo_d[3*Ncol*(j+jj-2)+3*(k+kk-2)+cl]
+					if v > mmax:
+						mmax = v
+			z_d[3*Ncol*(j)+3*(k)+cl] = mmax
+			# z_d[3*Ncol*(j)+3*(k)+cl] = zo_d[3*Ncol*(j)+3*(k)+cl]
 
-			v = zo_d[3*Ncol*(j)+3*(k)]+zo_d[3*Ncol*(j)+3*(k)+1]+zo_d[3*Ncol*(j)+3*(k)+2]
-			zo_d[3*Ncol*(j)+3*(k)] /= v
-			zo_d[3*Ncol*(j)+3*(k)+1] /= v
-			zo_d[3*Ncol*(j)+3*(k)+2] /= v
+
+	## Copy the values fm the other channels and re-normalize
+	for j in xrange(5,Nlin-5):
+		for k in xrange(5,Ncol-5):
+			v = z_d[3*Ncol*(j)+3*(k)]+z_d[3*Ncol*(j)+3*(k)+1]+z_d[3*Ncol*(j)+3*(k)+2]
+			z_d[3*Ncol*(j)+3*(k)] /= v
+			z_d[3*Ncol*(j)+3*(k)+1] /= v
+			z_d[3*Ncol*(j)+3*(k)+2] /= v
+
+			# if cl != 0:
+			# 	zo_d[3*Ncol*(j)+3*(k)] = z_d[3*Ncol*(j)+3*(k)]
+			# if cl != 1:
+			# 	zo_d[3*Ncol*(j)+3*(k)+1] = z_d[3*Ncol*(j)+3*(k)+1]
+			# if cl != 2:
+			# 	zo_d[3*Ncol*(j)+3*(k)+2] = z_d[3*Ncol*(j)+3*(k)+2]
+
+			# v = zo_d[3*Ncol*(j)+3*(k)]+zo_d[3*Ncol*(j)+3*(k)+1]+zo_d[3*Ncol*(j)+3*(k)+2]
+			# zo_d[3*Ncol*(j)+3*(k)] /= v
+			# zo_d[3*Ncol*(j)+3*(k)+1] /= v
+			# zo_d[3*Ncol*(j)+3*(k)+2] /= v
 			
 
-	z[:] = z_out
+	# z[:] = z_out
 
 
 
@@ -303,7 +325,7 @@ cdef z_morph(np.ndarray[DTYPE_t, ndim=2] z, int cl, int Ncol, int Nlin):
 ##############################################################################
 class EMGMM:
 
-	def __init__(self, unsigned int n_mixture, np.ndarray[DTYPE_t, ndim=2] data, Ncol, Nlin):
+	def __init__(self, unsigned int n_mixture, np.ndarray[DTYPE_t, ndim=2] data, Nlin, Ncol):
 		
 		self.n_mixture = n_mixture
 		self.data = data
@@ -325,7 +347,7 @@ class EMGMM:
 	def iterate(self, iter):
 #		try:
 		fit(iter, self.n_mixture, self.data, self.means, self.covars, self.z, self.pk,
-		    self.coefs, self.inv_covars, self.Ncol, self.Nlin)
+		    self.coefs, self.inv_covars, self.Nlin, self.Ncol)
 	#	except:
 	#		print "Singular Covariance Matrix... Restarting..."
 	#		self.__init__(self.n_mixture, self.data)
