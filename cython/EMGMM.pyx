@@ -191,10 +191,14 @@ cdef fit(unsigned int iter, int n_mixture,
 	 np.ndarray[DTYPE_t, ndim=2] z,
 	 np.ndarray[DTYPE_t, ndim=1] pk,
 	 np.ndarray[DTYPE_t, ndim=1] coefs,
-	 np.ndarray[DTYPE_t, ndim=3] inv_covars):
+	 np.ndarray[DTYPE_t, ndim=3] inv_covars,
+	 int Ncol, int Nlin):
 	pdf_params(covars, coefs, inv_covars)
+	cdef int cl = np.argmin(means[:,2])
+	print cl
 	for it in xrange(iter):
-		EStep(n_mixture, data, means, covars, z, pk, coefs, inv_covars)
+		EStep(n_mixture, data, means, covars, z, pk, coefs, inv_covars)		
+		z_morph(z, cl, Ncol, Nlin)
 		MStep(n_mixture, data, means, covars, z, pk)
 		pdf_params(covars, coefs, inv_covars)
 
@@ -211,13 +215,96 @@ cdef extern float fast_exp_mineiro(float) ## Doesn't work well
 def py_fast_exp(x):
 	return fast_exp_mineiro(x)
 
+
+
+
+
+
+
+##############################################################################
+# Morphological madness #
+##############################################################################
+cdef z_morph(np.ndarray[DTYPE_t, ndim=2] z, int cl, int Ncol, int Nlin):
+
+	cdef unsigned int j, k
+
+	cdef double* z_d = <double *> z.data
+	cdef double mmin,mmax,v
+
+	cdef np.ndarray z_out = np.zeros((z.shape[0], z.shape[1]), dtype=DTYPE)
+	cdef double* zo_d = <double *> z_out.data
+
+	z_out[:] = z
+	
+	for j in xrange(5,Nlin-5):
+		for k in xrange(5,Nlin-5):
+			mmax = 0
+			mmin=z_d[3*Ncol*(j)+3*(k)+cl]
+			v = z_d[3*Ncol*(j+3)+3*(k)+cl]
+			if v < mmin:
+				mmin = v
+			v = z_d[3*Ncol*(j-3)+3*(k)+cl]
+			if v < mmin:
+				mmin = v
+			if mmin > mmax:
+				mmax = mmin
+
+			mmin=z_d[3*Ncol*(j)+3*(k)+cl]
+			v = z_d[3*Ncol*(j)+3*(k+3)+cl]
+			if v < mmin:
+				mmin = v
+			v = z_d[3*Ncol*(j)+3*(k-3)+cl]
+			if v < mmin:
+				mmin = v
+			if mmin > mmax:
+				mmax = mmin
+
+			mmin=z_d[3*Ncol*(j)+3*(k)+cl]
+			v = z_d[3*Ncol*(j+2)+3*(k+2)+cl]
+			if v < mmin:
+				mmin = v
+			v = z_d[3*Ncol*(j-2)+3*(k-2)+cl]
+			if v < mmin:
+				mmin = v
+			if mmin > mmax:
+				mmax = mmin
+
+			mmin=z_d[3*Ncol*(j)+3*(k)+cl]
+			v = z_d[3*Ncol*(j+2)+3*(k-2)+cl]
+			if v < mmin:
+				mmin = v
+			v = z_d[3*Ncol*(j-2)+3*(k+2)+cl]
+			if v < mmin:
+				mmin = v
+			if mmin > mmax:
+				mmax = mmin
+
+			zo_d[3*Ncol*(j)+3*(k)+cl] = mmax
+
+			if cl != 0:
+				zo_d[3*Ncol*(j)+3*(k)] = z_d[3*Ncol*(j)+3*(k)]
+			if cl != 1:
+				zo_d[3*Ncol*(j)+3*(k)+1] = z_d[3*Ncol*(j)+3*(k)+1]
+			if cl != 2:
+				zo_d[3*Ncol*(j)+3*(k)+2] = z_d[3*Ncol*(j)+3*(k)+2]
+
+			v = zo_d[3*Ncol*(j)+3*(k)]+zo_d[3*Ncol*(j)+3*(k)+1]+zo_d[3*Ncol*(j)+3*(k)+2]
+			zo_d[3*Ncol*(j)+3*(k)] /= v
+			zo_d[3*Ncol*(j)+3*(k)+1] /= v
+			zo_d[3*Ncol*(j)+3*(k)+2] /= v
+			
+
+	z[:] = z_out
+
+
+
 ##############################################################################
 # Python class #
 ##############################################################################
 class EMGMM:
 
-	def __init__(self, unsigned int n_mixture, np.ndarray[DTYPE_t, ndim=2] data):
-
+	def __init__(self, unsigned int n_mixture, np.ndarray[DTYPE_t, ndim=2] data, Ncol, Nlin):
+		
 		self.n_mixture = n_mixture
 		self.data = data
 		self.dim = data.shape[1]
@@ -232,10 +319,13 @@ class EMGMM:
 		self.coefs = np.zeros((n_mixture,))
 		self.inv_covars = np.zeros(self.covars.shape)
 
+		self.Ncol = Ncol
+		self.Nlin = Nlin
+
 	def iterate(self, iter):
 #		try:
 		fit(iter, self.n_mixture, self.data, self.means, self.covars, self.z, self.pk,
-		    self.coefs, self.inv_covars)
+		    self.coefs, self.inv_covars, self.Ncol, self.Nlin)
 	#	except:
 	#		print "Singular Covariance Matrix... Restarting..."
 	#		self.__init__(self.n_mixture, self.data)

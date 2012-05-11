@@ -10,20 +10,20 @@ from pylab import *
 
 import EMGMM
 
-im = array(Image.open("imagens/chaly/1_Euglossa_chaly_m.jpg")).reshape(-1,3)
+im = array(Image.open("/home/nlw/ciencia/DADOS/abelhas/imagens/17_Euglossa_imperialis_m.jpg"))
 
-data = im[:,2:3]/256.0
-#data = im[:,0:3]/256.0
-a =  EMGMM.EMGMM(3, data)
+#data = im.reshape(-1,3)[:,2:3]/256.0
+data = im.reshape(-1,3)[:,0:3]/256.0
+a =  EMGMM.EMGMM(3, data, im.shape[0], im.shape[1])
 aini = copy(a.means)
 
-a.iterate(1)
+a.iterate(10)
 
 ast1 = copy(a.means)
 
-cProfile.runctx("a.iterate(10)", globals(), locals(), "Profile.prof")
-s = pstats.Stats("Profile.prof")
-s.strip_dirs().sort_stats("time").print_stats()
+# cProfile.runctx("a.iterate(10)", globals(), locals(), "Profile.prof")
+# s = pstats.Stats("Profile.prof")
+# s.strip_dirs().sort_stats("time").print_stats()
 
 # raise Exception
 # a.iterate(10)
@@ -51,4 +51,15 @@ title('Histograma do canal azul + GMM ajustado')
 #     plot([m,m], [0,hh.max()], 'r--')
 # for m in a.means:
 #     plot([m,m], [0,hh.max()], 'r-')
+
+
+figure(2)
+subplot(2,2,1)
+imshow(im)
+subplot(2,2,2)
+imshow(a.z.reshape(im.shape[0], im.shape[1],3)[:,:,0], cm.bone)
+subplot(2,2,3)
+imshow(a.z.reshape(im.shape[0], im.shape[1],3)[:,:,1], cm.bone)
+subplot(2,2,4)
+imshow(a.z.reshape(im.shape[0], im.shape[1],3)[:,:,2], cm.bone)
 
