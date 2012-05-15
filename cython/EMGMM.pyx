@@ -104,8 +104,8 @@ cdef EStep(int n_mixture,
     for i in xrange(n_mixture):
         pk_d[i] /= nf
 
-	#z = ndimage.filters.median_filter(z.reshape(1024,1360,3),(15,15,1)).reshape(-1,3)
-	#z = ndimage.filters.maximum_filter(z.reshape(1024,1360,3),size=5).reshape(-1,3)
+    #z = ndimage.filters.median_filter(z.reshape(1024,1360,3),(15,15,1)).reshape(-1,3)
+    #z = ndimage.filters.maximum_filter(z.reshape(1024,1360,3),size=5).reshape(-1,3)
 
 
 ##############################################################################
@@ -361,29 +361,29 @@ cdef z_morph(np.ndarray[DTYPE_t, ndim=2] z, int cl, int Nlin, int Ncol):
 ##############################################################################
 class EMGMM:
 
-	def __init__(self, int n_mixture, np.ndarray[DTYPE_t, ndim=2] data, Nlin, Ncol):
-		
-		self.n_mixture = n_mixture
-		self.data = data
-		self.dim = data.shape[1]
-		self.means = np.ones((n_mixture, self.dim))
-		self.covars = np.ones((n_mixture, self.dim, self.dim))
-		self.covars *= 1 * np.identity(self.dim)
-		self.means = kmeans(n_mixture, data)[0]
-		self.z = np.zeros((data.shape[0], n_mixture))
+    def __init__(self, int n_mixture, np.ndarray[DTYPE_t, ndim=2] data, Nlin, Ncol):
+        
+        self.n_mixture = n_mixture
+        self.data = data
+        self.dim = data.shape[1]
+        self.means = np.ones((n_mixture, self.dim))
+        self.covars = np.ones((n_mixture, self.dim, self.dim))
+        self.covars *= 1 * np.identity(self.dim)
+        self.means = kmeans(n_mixture, data)[0]
+        self.z = np.zeros((data.shape[0], n_mixture))
 
-		self.pk = np.ones((n_mixture,1)) / n_mixture
+        self.pk = np.ones((n_mixture,1)) / n_mixture
 
-		self.coefs = np.zeros((n_mixture,))
-		self.inv_covars = np.zeros(self.covars.shape)
+        self.coefs = np.zeros((n_mixture,))
+        self.inv_covars = np.zeros(self.covars.shape)
 
-		self.Ncol = Ncol
-		self.Nlin = Nlin
+        self.Ncol = Ncol
+        self.Nlin = Nlin
 
-	def iterate(self, iter):
-#		try:
-		fit(iter, self.n_mixture, self.data, self.means, self.covars, self.z, self.pk,
-				self.coefs, self.inv_covars, self.Nlin, self.Ncol)
+    def iterate(self, iter):
+#        try:
+        fit(iter, self.n_mixture, self.data, self.means, self.covars, self.z, self.pk,
+                self.coefs, self.inv_covars, self.Nlin, self.Ncol)
 
 ##############################################################################
 
@@ -423,30 +423,30 @@ cpdef kmeans(unsigned int n_clusters, np.ndarray[DTYPE_t, ndim=2] data):
 ##############################################################################
 
 cpdef distance(np.ndarray[DTYPE_t, ndim=2] clusters, 
-	np.ndarray[DTYPE_t, ndim=2] data):
-	
-	cdef unsigned int i
-	cdef np.ndarray[DTYPE_t, ndim=2] c = np.zeros((clusters.shape[0], data.shape[0]))
+    np.ndarray[DTYPE_t, ndim=2] data):
+    
+    cdef unsigned int i
+    cdef np.ndarray[DTYPE_t, ndim=2] c = np.zeros((clusters.shape[0], data.shape[0]))
 
-	for i in xrange(clusters.shape[0]):
-		c[i] = np.sqrt(((data-clusters[i])**2).sum(axis=1))
-	return c.T
+    for i in xrange(clusters.shape[0]):
+        c[i] = np.sqrt(((data-clusters[i])**2).sum(axis=1))
+    return c.T
 
 cpdef distance3(np.ndarray[DTYPE_t, ndim=2] clusters, 
-	np.ndarray[DTYPE_t, ndim=2] data):
-		
-	cdef unsigned int i, j
-	cdef double x1, x2, x3
-	cdef np.ndarray[DTYPE_t, ndim=2] c = np.zeros((data.shape[0],3))
+    np.ndarray[DTYPE_t, ndim=2] data):
+        
+    cdef unsigned int i, j
+    cdef double x1, x2, x3
+    cdef np.ndarray[DTYPE_t, ndim=2] c = np.zeros((data.shape[0],3))
 
-	for j in xrange(data.shape[0]):
-		for i in xrange(3):
-			x1 = (data[j,0]-clusters[i,0])*(data[j,0]-clusters[i,0])
-			x2 = (data[j,1]-clusters[i,1])*(data[j,1]-clusters[i,1])
-			x3 = (data[j,2]-clusters[i,2])*(data[j,2]-clusters[i,2])
-			c[j,i] = sqrt(x1+x2+x2)
+    for j in xrange(data.shape[0]):
+        for i in xrange(3):
+            x1 = (data[j,0]-clusters[i,0])*(data[j,0]-clusters[i,0])
+            x2 = (data[j,1]-clusters[i,1])*(data[j,1]-clusters[i,1])
+            x3 = (data[j,2]-clusters[i,2])*(data[j,2]-clusters[i,2])
+            c[j,i] = sqrt(x1+x2+x2)
 
-	return c
+    return c
 
 
 ## Local Variables:
