@@ -10,8 +10,8 @@ from pylab import *
 
 import EMGMM
 
-im = array(Image.open("/home/nlw/ciencia/DADOS/abelhas/imagens/5_Euglossa_flammea_f.jpg"))
-#im = array(Image.open(os.getenv("HOME") + "/ciencia/DADOS/abelhas/imagens/001.png"))
+#im = array(Image.open("/home/nlw/ciencia/DADOS/abelhas/imagens/5_Euglossa_flammea_f.jpg"))
+im = array(Image.open(os.getenv("HOME") + "/ciencia/DADOS/abelhas/imagens/001.png"))
 
 #data = im.reshape(-1,3)[:,2:3]/256.0
 data = im.reshape(-1,3)[:,0:3]/256.0
