@@ -189,7 +189,6 @@ cdef MStep(int n_mixture, np.ndarray[DTYPE_t, ndim=2] data,
 # Fit #
 ##############################################################################
 cdef fit(unsigned int iter, int n_mixture,
-
      np.ndarray[DTYPE_t, ndim=2] data, 
      np.ndarray[DTYPE_t, ndim=2] means,
      np.ndarray[DTYPE_t, ndim=3] covars, 
@@ -372,7 +371,7 @@ class EMGMM:
         self.means = kmeans(n_mixture, data)[0]
         self.z = np.zeros((data.shape[0], n_mixture))
 
-        self.pk = np.ones((n_mixture,1)) / n_mixture
+        self.pk = np.ones((n_mixture,)) / n_mixture
 
         self.coefs = np.zeros((n_mixture,))
         self.inv_covars = np.zeros(self.covars.shape)
