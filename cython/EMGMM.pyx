@@ -8,6 +8,8 @@ from __future__ import division
 import numpy as np
 cimport numpy as np
 
+from scipy import ndimage
+
 DTYPE = np.float64
 ctypedef np.float64_t DTYPE_t
 
@@ -102,7 +104,8 @@ cdef EStep(int n_mixture,
 	for i in xrange(n_mixture):
 		pk_d[i] /= nf
 
-
+	#z = ndimage.filters.median_filter(z.reshape(1024,1360,3),(15,15,1)).reshape(-1,3)
+	#z = ndimage.filters.maximum_filter(z.reshape(1024,1360,3),size=5).reshape(-1,3)
 
 
 ##############################################################################
@@ -199,7 +202,9 @@ cdef fit(unsigned int iter, int n_mixture,
 	print cl
 	for it in xrange(iter):
 		EStep(n_mixture, data, means, covars, z, pk, coefs, inv_covars)		
-		z_morph(z, cl, Nlin, Ncol)
+		#z_morph(z, cl, Nlin, Ncol)	
+		#z = np.hstack( (z.reshape(1024,1360,3)[:,:,0:2].reshape(-1,2) , (ndimage.filters.median_filter( z.reshape(1024,1360,3)[:,:,cl] , (15,15) ).reshape(-1,1)) ))
+		#z = (z.T/z.sum(axis=1)).T
 		MStep(n_mixture, data, means, covars, z, pk)
 		pdf_params(covars, coefs, inv_covars)
 
@@ -314,29 +319,24 @@ cdef z_morph(np.ndarray[DTYPE_t, ndim=2] z, int cl, int Nlin, int Ncol):
 			# zo_d[3*Ncol*(j)+3*(k)] /= v
 			# zo_d[3*Ncol*(j)+3*(k)+1] /= v
 			# zo_d[3*Ncol*(j)+3*(k)+2] /= v
-			
-
-	# z[:] = z_out
-
-
 
 ##############################################################################
 # Python class #
 ##############################################################################
 class EMGMM:
 
-	def __init__(self, unsigned int n_mixture, np.ndarray[DTYPE_t, ndim=2] data, Nlin, Ncol):
+	def __init__(self, int n_mixture, np.ndarray[DTYPE_t, ndim=2] data, Nlin, Ncol):
 		
 		self.n_mixture = n_mixture
 		self.data = data
 		self.dim = data.shape[1]
 		self.means = np.ones((n_mixture, self.dim))
 		self.covars = np.ones((n_mixture, self.dim, self.dim))
-		self.covars *= 0.01 * np.identity(self.dim)
+		self.covars *= 1 * np.identity(self.dim)
 		self.means = kmeans(n_mixture, data)[0]
-		self.z = np.zeros((len(data), self.n_mixture))
+		self.z = np.zeros((data.shape[0], n_mixture))
 
-		self.pk = np.ones((n_mixture,)) / n_mixture
+		self.pk = np.ones((n_mixture,1)) / n_mixture
 
 		self.coefs = np.zeros((n_mixture,))
 		self.inv_covars = np.zeros(self.covars.shape)
@@ -359,7 +359,7 @@ class EMGMM:
 ##############################################################################
 # K means #
 ##############################################################################
-cdef kmeans(unsigned int n_clusters, np.ndarray[DTYPE_t, ndim=2] data):
+cpdef kmeans(unsigned int n_clusters, np.ndarray[DTYPE_t, ndim=2] data):
 
 	cdef np.ndarray[DTYPE_t, ndim=2] k = np.random.randint(floor(data.min()), 
 		ceil(data.max()+1), size=(n_clusters, data.shape[1]))/1
@@ -371,7 +371,7 @@ cdef kmeans(unsigned int n_clusters, np.ndarray[DTYPE_t, ndim=2] data):
 
 	while(True):
 		
-		c = distance(k, data)
+		c = distance3(k, data)
 		c[:, 0] = c.argmin(axis=1)
 
 		for i in xrange(len(k)):
@@ -389,17 +389,32 @@ cdef kmeans(unsigned int n_clusters, np.ndarray[DTYPE_t, ndim=2] data):
 ##############################################################################
 # Distance #
 ##############################################################################
-cdef distance(np.ndarray[DTYPE_t, ndim=2] clusters, 
+cpdef distance(np.ndarray[DTYPE_t, ndim=2] clusters, 
 	np.ndarray[DTYPE_t, ndim=2] data):
 	
 	cdef unsigned int i
 	cdef np.ndarray[DTYPE_t, ndim=2] c = np.zeros((clusters.shape[0], data.shape[0]))
 
-
-
 	for i in xrange(clusters.shape[0]):
 		c[i] = np.sqrt(((data-clusters[i])**2).sum(axis=1))
 	return c.T
+
+
+cpdef distance3(np.ndarray[DTYPE_t, ndim=2] clusters, 
+	np.ndarray[DTYPE_t, ndim=2] data):
+		
+	cdef unsigned int i, j
+	cdef double x1, x2, x3
+	cdef np.ndarray[DTYPE_t, ndim=2] c = np.zeros((data.shape[0],3))
+
+	for j in xrange(data.shape[0]):
+		for i in xrange(3):
+			x1 = (data[j,0]-clusters[i,0])*(data[j,0]-clusters[i,0])
+			x2 = (data[j,1]-clusters[i,1])*(data[j,1]-clusters[i,1])
+			x3 = (data[j,2]-clusters[i,2])*(data[j,2]-clusters[i,2])
+			c[j,i] = sqrt(x1+x2+x2)
+
+	return c
 
 
 ## Local Variables:
