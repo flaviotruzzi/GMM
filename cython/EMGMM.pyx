@@ -189,26 +189,7 @@ cdef MStep(int n_mixture, np.ndarray[DTYPE_t, ndim=2] data,
 # Fit #
 ##############################################################################
 cdef fit(unsigned int iter, int n_mixture,
-<<<<<<< HEAD
-	 np.ndarray[DTYPE_t, ndim=2] data, 
-	 np.ndarray[DTYPE_t, ndim=2] means,
-	 np.ndarray[DTYPE_t, ndim=3] covars, 
-	 np.ndarray[DTYPE_t, ndim=2] z,
-	 np.ndarray[DTYPE_t, ndim=1] pk,
-	 np.ndarray[DTYPE_t, ndim=1] coefs,
-	 np.ndarray[DTYPE_t, ndim=3] inv_covars,
-	 int Nlin, int Ncol):
-	pdf_params(covars, coefs, inv_covars)
-	cdef int cl = np.argmin(means[:,2])
-	print cl
-	for it in xrange(iter):
-		EStep(n_mixture, data, means, covars, z, pk, coefs, inv_covars)		
-		#z_morph(z, cl, Nlin, Ncol)	
-		#z = np.hstack( (z.reshape(1024,1360,3)[:,:,0:2].reshape(-1,2) , (ndimage.filters.median_filter( z.reshape(1024,1360,3)[:,:,cl] , (15,15) ).reshape(-1,1)) ))
-		#z = (z.T/z.sum(axis=1)).T
-		MStep(n_mixture, data, means, covars, z, pk)
-		pdf_params(covars, coefs, inv_covars)
-=======
+
      np.ndarray[DTYPE_t, ndim=2] data, 
      np.ndarray[DTYPE_t, ndim=2] means,
      np.ndarray[DTYPE_t, ndim=3] covars, 
@@ -225,7 +206,7 @@ cdef fit(unsigned int iter, int n_mixture,
         z_morph(z, cl, Nlin, Ncol)
         MStep(n_mixture, data, means, covars, z, pk)
         pdf_params(covars, coefs, inv_covars)
->>>>>>> d25789cbc5f08bf2aa69550a2d4355c05e905287
+
 
 cdef extern double atan2(double,double)
 cdef extern double floor(double)
@@ -251,95 +232,6 @@ def py_fast_exp(x):
 ##############################################################################
 cdef z_morph(np.ndarray[DTYPE_t, ndim=2] z, int cl, int Nlin, int Ncol):
 
-<<<<<<< HEAD
-	cdef int j, k, jj, kk
-
-	cdef double* z_d = <double *> z.data
-	cdef double mmin,mmax,v
-
-	cdef np.ndarray z_out = np.zeros((z.shape[0], z.shape[1]), dtype=DTYPE)
-	cdef double* zo_d = <double *> z_out.data
-
-	z_out[:] = z
-	
-	for j in xrange(5,Nlin-5):
-		for k in xrange(5,Ncol-5):
-			mmax = 0
-			mmin=z_d[3*Ncol*(j)+3*(k)+cl]
-			v = z_d[3*Ncol*(j+2)+3*(k)+cl]
-			if v < mmin:
-				mmin = v
-			v = z_d[3*Ncol*(j-2)+3*(k)+cl]
-			if v < mmin:
-				mmin = v
-			if mmin > mmax:
-				mmax = mmin
-
-			mmin=z_d[3*Ncol*(j)+3*(k)+cl]
-			v = z_d[3*Ncol*(j)+3*(k+2)+cl]
-			if v < mmin:
-				mmin = v
-			v = z_d[3*Ncol*(j)+3*(k-2)+cl]
-			if v < mmin:
-				mmin = v
-			if mmin > mmax:
-				mmax = mmin
-
-			mmin=z_d[3*Ncol*(j)+3*(k)+cl]
-			v = z_d[3*Ncol*(j+2)+3*(k+2)+cl]
-			if v < mmin:
-				mmin = v
-			v = z_d[3*Ncol*(j-2)+3*(k-2)+cl]
-			if v < mmin:
-				mmin = v
-			if mmin > mmax:
-				mmax = mmin
-
-			mmin=z_d[3*Ncol*(j)+3*(k)+cl]
-			v = z_d[3*Ncol*(j+2)+3*(k-2)+cl]
-			if v < mmin:
-				mmin = v
-			v = z_d[3*Ncol*(j-2)+3*(k+2)+cl]
-			if v < mmin:
-				mmin = v
-			if mmin > mmax:
-				mmax = mmin
-
-			zo_d[3*Ncol*(j)+3*(k)+cl] = mmax
-
-	## Now go back to the first array, making a dilation
-	for j in xrange(5,Nlin-5):
-		for k in xrange(5,Ncol-5):
-			mmax = 0
-			for jj in xrange(0,5):
-				for kk in xrange(0,5):
-					v = zo_d[3*Ncol*(j+jj-2)+3*(k+kk-2)+cl]
-					if v > mmax:
-						mmax = v
-			z_d[3*Ncol*(j)+3*(k)+cl] = mmax
-			# z_d[3*Ncol*(j)+3*(k)+cl] = zo_d[3*Ncol*(j)+3*(k)+cl]
-
-
-	## Copy the values fm the other channels and re-normalize
-	for j in xrange(5,Nlin-5):
-		for k in xrange(5,Ncol-5):
-			v = z_d[3*Ncol*(j)+3*(k)]+z_d[3*Ncol*(j)+3*(k)+1]+z_d[3*Ncol*(j)+3*(k)+2]
-			z_d[3*Ncol*(j)+3*(k)] /= v
-			z_d[3*Ncol*(j)+3*(k)+1] /= v
-			z_d[3*Ncol*(j)+3*(k)+2] /= v
-
-			# if cl != 0:
-			#		zo_d[3*Ncol*(j)+3*(k)] = z_d[3*Ncol*(j)+3*(k)]
-			# if cl != 1:
-			#		zo_d[3*Ncol*(j)+3*(k)+1] = z_d[3*Ncol*(j)+3*(k)+1]
-			# if cl != 2:
-			#		zo_d[3*Ncol*(j)+3*(k)+2] = z_d[3*Ncol*(j)+3*(k)+2]
-
-			# v = zo_d[3*Ncol*(j)+3*(k)]+zo_d[3*Ncol*(j)+3*(k)+1]+zo_d[3*Ncol*(j)+3*(k)+2]
-			# zo_d[3*Ncol*(j)+3*(k)] /= v
-			# zo_d[3*Ncol*(j)+3*(k)+1] /= v
-			# zo_d[3*Ncol*(j)+3*(k)+2] /= v
-=======
     cdef int j, k, jj, kk, cc
 
     cdef double* z_d = <double *> z.data
@@ -464,14 +356,11 @@ cdef z_morph(np.ndarray[DTYPE_t, ndim=2] z, int cl, int Nlin, int Ncol):
     # z[:] = z_out
 
 
->>>>>>> d25789cbc5f08bf2aa69550a2d4355c05e905287
-
 ##############################################################################
 # Python class #
 ##############################################################################
 class EMGMM:
 
-<<<<<<< HEAD
 	def __init__(self, int n_mixture, np.ndarray[DTYPE_t, ndim=2] data, Nlin, Ncol):
 		
 		self.n_mixture = n_mixture
@@ -495,39 +384,6 @@ class EMGMM:
 #		try:
 		fit(iter, self.n_mixture, self.data, self.means, self.covars, self.z, self.pk,
 				self.coefs, self.inv_covars, self.Nlin, self.Ncol)
-	#	except:
-	#		print "Singular Covariance Matrix... Restarting..."
-	#		self.__init__(self.n_mixture, self.data)
-	#		self.iterate(iter)
-=======
-    def __init__(self, unsigned int n_mixture, np.ndarray[DTYPE_t, ndim=2] data, Nlin, Ncol):
-        
-        self.n_mixture = n_mixture
-        self.data = data
-        self.dim = data.shape[1]
-        self.means = np.ones((n_mixture, self.dim))
-        self.covars = np.ones((n_mixture, self.dim, self.dim))
-        self.covars *= 0.01 * np.identity(self.dim)
-        self.means = kmeans(n_mixture, data)[0]
-        self.z = np.zeros((len(data), self.n_mixture))
-
-        self.pk = np.ones((n_mixture,)) / n_mixture
-
-        self.coefs = np.zeros((n_mixture,))
-        self.inv_covars = np.zeros(self.covars.shape)
-
-        self.Ncol = Ncol
-        self.Nlin = Nlin
-
-    def iterate(self, iter):
-#        try:
-        fit(iter, self.n_mixture, self.data, self.means, self.covars, self.z, self.pk,
-            self.coefs, self.inv_covars, self.Nlin, self.Ncol)
-    #    except:
-    #        print "Singular Covariance Matrix... Restarting..."
-    #        self.__init__(self.n_mixture, self.data)
-    #        self.iterate(iter)
->>>>>>> d25789cbc5f08bf2aa69550a2d4355c05e905287
 
 ##############################################################################
 
@@ -545,17 +401,10 @@ cpdef kmeans(unsigned int n_clusters, np.ndarray[DTYPE_t, ndim=2] data):
 
     cdef unsigned int i
 
-<<<<<<< HEAD
-	while(True):
-		
-		c = distance3(k, data)
-		c[:, 0] = c.argmin(axis=1)
-=======
     while(True):
         
-        c = distance(k, data)
+        c = distance3(k, data)
         c[:, 0] = c.argmin(axis=1)
->>>>>>> d25789cbc5f08bf2aa69550a2d4355c05e905287
 
         for i in xrange(len(k)):
             if (len(data[c[:,0]==i]) > 0):
@@ -582,20 +431,6 @@ cpdef distance(np.ndarray[DTYPE_t, ndim=2] clusters,
 	for i in xrange(clusters.shape[0]):
 		c[i] = np.sqrt(((data-clusters[i])**2).sum(axis=1))
 	return c.T
-=======
-cdef distance(np.ndarray[DTYPE_t, ndim=2] clusters, 
-    np.ndarray[DTYPE_t, ndim=2] data):
-    
-    cdef unsigned int i
-    cdef np.ndarray[DTYPE_t, ndim=2] c = np.zeros((clusters.shape[0], data.shape[0]))
-
-
-
-    for i in xrange(clusters.shape[0]):
-        c[i] = np.sqrt(((data-clusters[i])**2).sum(axis=1))
-    return c.T
->>>>>>> d25789cbc5f08bf2aa69550a2d4355c05e905287
-
 
 cpdef distance3(np.ndarray[DTYPE_t, ndim=2] clusters, 
 	np.ndarray[DTYPE_t, ndim=2] data):
