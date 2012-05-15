@@ -421,7 +421,7 @@ cpdef kmeans(unsigned int n_clusters, np.ndarray[DTYPE_t, ndim=2] data):
 ##############################################################################
 # Distance #
 ##############################################################################
-<<<<<<< HEAD
+
 cpdef distance(np.ndarray[DTYPE_t, ndim=2] clusters, 
 	np.ndarray[DTYPE_t, ndim=2] data):
 	
