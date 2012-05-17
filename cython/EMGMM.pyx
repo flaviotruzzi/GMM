@@ -365,10 +365,8 @@ class EMGMM:
         self.n_mixture = n_mixture
         self.data = data
         self.dim = data.shape[1]
-        self.means = np.ones((n_mixture, self.dim))
-        self.covars = np.ones((n_mixture, self.dim, self.dim))
-        self.covars *= 1 * np.identity(self.dim)
-        self.means = kmeans(n_mixture, data)[0]
+        self.means, self.covars, useless = kmeans(n_mixture, data)
+        self.covars = np.array(self.covars)
         self.z = np.zeros((data.shape[0], n_mixture))
 
         self.pk = np.ones((n_mixture,)) / n_mixture
@@ -396,25 +394,54 @@ cpdef kmeans(unsigned int n_clusters, np.ndarray[DTYPE_t, ndim=2] data):
         ceil(data.max()+1), size=(n_clusters, data.shape[1]))/1
 
     cdef np.ndarray[DTYPE_t, ndim=2] kn = np.zeros_like(k)
+    cdef np.ndarray[DTYPE_t, ndim=2] kp = np.zeros_like(k)
+    cdef np.ndarray[DTYPE_t, ndim=1] ps = np.zeros((n_clusters,))
     cdef np.ndarray[DTYPE_t, ndim=2] c = np.zeros((data.shape[0], k.shape[0]))
 
-    cdef unsigned int i
+    cdef unsigned int i, j, p
+    cdef double mini
 
     while(True):
         
         c = distance3(k, data)
-        c[:, 0] = c.argmin(axis=1)
 
-        for i in xrange(len(k)):
-            if (len(data[c[:,0]==i]) > 0):
-                kn[i] = data[c[:,0]==i].sum(axis=0)/len(data[c[:,0]==i])
+        for i in xrange(c.shape[0]):
+          mini = c[i,0]
+          p = 0
+          for j in xrange(1,c.shape[1]):
+            if mini > c[i,j]:
+              mini = c[i,j]
+              p = j
+          c[i, 0] = p
+
+        for i in xrange(n_clusters):
+          ps[i] = 0
+          for j in xrange(data.shape[1]):
+            kp[i,j] = 0.0
+      
+        for j in xrange(data.shape[0]):
+          for i in xrange(n_clusters):
+            if ( c[j,0] == i ):
+              kp[i] += data[j]
+              ps[i] += 1
+
+        for i in xrange(n_clusters):
+          kn[i] = kp[i]/ps[i]
+          
+#        for i in xrange(k.shape[0]):
+#            if (len(data[c[:,0]==i]) > 0):
+#                kn[i] = data[c[:,0]==i].sum(axis=0)/len(data[c[:,0]==i])
 
         if (len(np.where((kn==k) == False)[0]) == 0):
             break
         else:
             k = 1*kn
+        print "."
+    cdef np.ndarray[DTYPE_t, ndim=3] covars = np.empty((n_clusters,data.shape[1],data.shape[1]))
+    for i in xrange(n_clusters):
+      covars[i] = np.cov(data[c[:,0]==i].T)
 
-    return [k,c[:,0]]
+    return [k,covars,c[:,0]]
 
 
 ##############################################################################
@@ -431,12 +458,12 @@ cpdef distance(np.ndarray[DTYPE_t, ndim=2] clusters,
         c[i] = np.sqrt(((data-clusters[i])**2).sum(axis=1))
     return c.T
 
-cpdef distance3(np.ndarray[DTYPE_t, ndim=2] clusters, 
+cpdef inline distance3(np.ndarray[DTYPE_t, ndim=2] clusters, 
     np.ndarray[DTYPE_t, ndim=2] data):
         
     cdef unsigned int i, j
     cdef double x1, x2, x3
-    cdef np.ndarray[DTYPE_t, ndim=2] c = np.zeros((data.shape[0],3))
+    cdef np.ndarray[DTYPE_t, ndim=2] c = np.empty((data.shape[0],3))
 
     for j in xrange(data.shape[0]):
         for i in xrange(3):
