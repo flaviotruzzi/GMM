@@ -7,7 +7,6 @@
 from __future__ import division
 import numpy as np
 cimport numpy as np
-
 from scipy import ndimage
 
 DTYPE = np.float64
@@ -365,7 +364,7 @@ class EMGMM:
         self.n_mixture = n_mixture
         self.data = data
         self.dim = data.shape[1]
-        self.means, self.covars, useless = kmeans(n_mixture, data)
+        self.means, self.covars, useless = kmeans(n_mixture, data, 0)
         self.covars = np.array(self.covars)
         self.z = np.zeros((data.shape[0], n_mixture))
 
@@ -388,7 +387,7 @@ class EMGMM:
 ##############################################################################
 # K means #
 ##############################################################################
-cpdef kmeans(unsigned int n_clusters, np.ndarray[DTYPE_t, ndim=2] data):
+cpdef kmeans(unsigned int n_clusters, np.ndarray[DTYPE_t, ndim=2] data, unsigned int steps):
 
     cdef np.ndarray[DTYPE_t, ndim=2] k = np.random.randint(floor(data.min()), 
         ceil(data.max()+1), size=(n_clusters, data.shape[1]))/1
@@ -397,13 +396,13 @@ cpdef kmeans(unsigned int n_clusters, np.ndarray[DTYPE_t, ndim=2] data):
     cdef np.ndarray[DTYPE_t, ndim=2] kp = np.zeros_like(k)
     cdef np.ndarray[DTYPE_t, ndim=1] ps = np.zeros((n_clusters,))
     cdef np.ndarray[DTYPE_t, ndim=2] c = np.zeros((data.shape[0], k.shape[0]))
-
-    cdef unsigned int i, j, p
+    cdef np.ndarray[DTYPE_t, ndim=3] covars = np.empty((n_clusters,data.shape[1],data.shape[1]))
+    cdef unsigned int i, j, p, step
     cdef double mini
-
+    step = 0
     while(True):
-        
-        c = distance3(k, data)
+        step += 1
+        c = distance(k, data)
 
         for i in xrange(c.shape[0]):
           mini = c[i,0]
@@ -418,26 +417,27 @@ cpdef kmeans(unsigned int n_clusters, np.ndarray[DTYPE_t, ndim=2] data):
           ps[i] = 0
           for j in xrange(data.shape[1]):
             kp[i,j] = 0.0
-      
-        for j in xrange(data.shape[0]):
-          for i in xrange(n_clusters):
-            if ( c[j,0] == i ):
-              kp[i] += data[j]
-              ps[i] += 1
-
+        
         for i in xrange(n_clusters):
-          kn[i] = kp[i]/ps[i]
-          
-#        for i in xrange(k.shape[0]):
-#            if (len(data[c[:,0]==i]) > 0):
-#                kn[i] = data[c[:,0]==i].sum(axis=0)/len(data[c[:,0]==i])
+            for j in xrange(data.shape[0]):
+                if (c[j,0] == i):
+                    for p in xrange(k.shape[1]):
+                        kp[i,p] += data[j,p]
+                        ps[i] += 1               
+        
+        for i in xrange(n_clusters):
+            if (ps[i] > 0):
+              kn[i] = kp[i]/ps[i]
 
-        if (len(np.where((kn==k) == False)[0]) == 0):
-            break
+        if steps == 0:  
+            if (len(np.where((kn==k) == False)[0]) == 0):    
+                break
         else:
-            k = 1*kn
-        print "."
-    cdef np.ndarray[DTYPE_t, ndim=3] covars = np.empty((n_clusters,data.shape[1],data.shape[1]))
+            if (step >= steps):
+                break
+        
+        k = 1*kn
+    
     for i in xrange(n_clusters):
       covars[i] = np.cov(data[c[:,0]==i].T)
 
@@ -448,29 +448,19 @@ cpdef kmeans(unsigned int n_clusters, np.ndarray[DTYPE_t, ndim=2] data):
 # Distance #
 ##############################################################################
 
-cpdef distance(np.ndarray[DTYPE_t, ndim=2] clusters, 
-    np.ndarray[DTYPE_t, ndim=2] data):
-    
-    cdef unsigned int i
-    cdef np.ndarray[DTYPE_t, ndim=2] c = np.zeros((clusters.shape[0], data.shape[0]))
-
-    for i in xrange(clusters.shape[0]):
-        c[i] = np.sqrt(((data-clusters[i])**2).sum(axis=1))
-    return c.T
-
-cpdef inline distance3(np.ndarray[DTYPE_t, ndim=2] clusters, 
+cpdef inline distance(np.ndarray[DTYPE_t, ndim=2] clusters, 
     np.ndarray[DTYPE_t, ndim=2] data):
         
     cdef unsigned int i, j
     cdef double x1, x2, x3
-    cdef np.ndarray[DTYPE_t, ndim=2] c = np.empty((data.shape[0],3))
+    cdef np.ndarray[DTYPE_t, ndim=2] c = np.empty((data.shape[0],clusters.shape[0]))
 
-    for j in xrange(data.shape[0]):
-        for i in xrange(3):
-            x1 = (data[j,0]-clusters[i,0])*(data[j,0]-clusters[i,0])
-            x2 = (data[j,1]-clusters[i,1])*(data[j,1]-clusters[i,1])
-            x3 = (data[j,2]-clusters[i,2])*(data[j,2]-clusters[i,2])
-            c[j,i] = sqrt(x1+x2+x2)
+    for i in xrange(clusters.shape[0]):
+        for j in xrange(data.shape[0]):
+            x1 = 0
+            for k in xrange(clusters.shape[1]):
+                x1 += (data[j,k]-clusters[i,k])*(data[j,k]-clusters[i,k])
+            c[j,i] = sqrt(x1)
 
     return c
 
