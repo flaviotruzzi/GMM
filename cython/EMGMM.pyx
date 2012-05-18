@@ -201,7 +201,7 @@ cdef fit(unsigned int iter, int n_mixture,
     print 'Venação: ', cl
     for it in xrange(iter):
         EStep(n_mixture, data, means, covars, z, pk, coefs, inv_covars)        
-        z_morph(z, cl, Nlin, Ncol)
+        #z_morph(z, cl, Nlin, Ncol)
         MStep(n_mixture, data, means, covars, z, pk)
         pdf_params(covars, coefs, inv_covars)
 
@@ -370,6 +370,10 @@ class EMGMM:
 
         self.pk = np.ones((n_mixture,)) / n_mixture
 
+        for i in xrange(self.covars.shape[0]):
+            if (np.linalg.det(self.covars[i]) == 0):
+                self.covars[i] = np.eye(self.dim)
+
         self.coefs = np.zeros((n_mixture,))
         self.inv_covars = np.zeros(self.covars.shape)
 
@@ -395,11 +399,12 @@ cpdef kmeans(unsigned int n_clusters, np.ndarray[DTYPE_t, ndim=2] data, unsigned
     cdef np.ndarray[DTYPE_t, ndim=2] kn = np.zeros_like(k)
     cdef np.ndarray[DTYPE_t, ndim=2] kp = np.zeros_like(k)
     cdef np.ndarray[DTYPE_t, ndim=1] ps = np.zeros((n_clusters,))
-    cdef np.ndarray[DTYPE_t, ndim=2] c = np.zeros((data.shape[0], k.shape[0]))
+    cdef np.ndarray[DTYPE_t, ndim=2] c = np.zeros((data.shape[0], k.shape[1]))
     cdef np.ndarray[DTYPE_t, ndim=3] covars = np.empty((n_clusters,data.shape[1],data.shape[1]))
     cdef unsigned int i, j, p, step
     cdef double mini
     step = 0
+
     while(True):
         step += 1
         c = distance(k, data)
@@ -412,22 +417,33 @@ cpdef kmeans(unsigned int n_clusters, np.ndarray[DTYPE_t, ndim=2] data, unsigned
               mini = c[i,j]
               p = j
           c[i, 0] = p
+        
 
         for i in xrange(n_clusters):
           ps[i] = 0
           for j in xrange(data.shape[1]):
             kp[i,j] = 0.0
-        
-        for i in xrange(n_clusters):
-            for j in xrange(data.shape[0]):
+       
+
+        for j in xrange(data.shape[0]):
+            for i in xrange(k.shape[0]):
                 if (c[j,0] == i):
                     for p in xrange(k.shape[1]):
                         kp[i,p] += data[j,p]
-                        ps[i] += 1               
+                        ps[i] += 1
+
+#        for i in xrange(n_clusters):
+#            for j in xrange(data.shape[0]):
+#                if (c[j,0] == i):
+#                    for p in xrange(k.shape[1]):
+#                        kp[i,p] += data[j,p]
+#                        ps[i] += 1               
         
+
         for i in xrange(n_clusters):
             if (ps[i] > 0):
               kn[i] = kp[i]/ps[i]
+
 
         if steps == 0:  
             if (len(np.where((kn==k) == False)[0]) == 0):    
@@ -435,17 +451,18 @@ cpdef kmeans(unsigned int n_clusters, np.ndarray[DTYPE_t, ndim=2] data, unsigned
         else:
             if (step >= steps):
                 break
-        
         k = 1*kn
     
-    for i in xrange(n_clusters):
-      covars[i] = np.cov(data[c[:,0]==i].T)
-
+    for i in xrange(covars.shape[0]):
+        if len(np.where(c[:,0] == i)[0]) > 0:
+            covars[i] = np.cov(data[np.where(c[:,0]==i)].T)
+        else:
+            covars[i] = np.eye(data.shape[1])
     return [k,covars,c[:,0]]
 
 
 ##############################################################################
-# Distance #
+# Distance #a
 ##############################################################################
 
 cpdef inline distance(np.ndarray[DTYPE_t, ndim=2] clusters, 
